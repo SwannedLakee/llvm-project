@@ -334,8 +334,7 @@ namespace InitializerTemporaries {
   };
 
   constexpr int f() {
-    S{}; // ref-note {{in call to 'S{}.~S()'}} \
-         // expected-note {{in call to '&S{}->~S()'}}
+    S{}; // both-note {{in call to 'S{}.~S()'}}
     return 12;
   }
   static_assert(f() == 12); // both-error {{not an integral constant expression}} \
@@ -598,8 +597,7 @@ namespace Destructors {
     }
   };
   constexpr int testS() {
-    S{}; // ref-note {{in call to 'S{}.~S()'}} \
-         // expected-note {{in call to '&S{}->~S()'}}
+    S{}; // both-note {{in call to 'S{}.~S()'}}
     return 1;
   }
   static_assert(testS() == 1); // both-error {{not an integral constant expression}} \
@@ -1560,3 +1558,19 @@ namespace ArrayInitChain {
   static_assert(A[1].Width == 12, "");
   static_assert(A[1].Mask == 13, "");
 }
+
+#if __cplusplus >= 202002L
+namespace ctorOverrider {
+  // Ensure that we pick the right final overrider during construction.
+  struct A {
+    virtual constexpr char f() const { return 'A'; }
+    char a = f();
+  };
+
+  struct Covariant1 {
+    A d;
+  };
+
+  constexpr Covariant1 cb;
+}
+#endif
