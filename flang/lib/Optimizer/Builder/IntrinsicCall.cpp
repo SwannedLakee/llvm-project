@@ -41,7 +41,7 @@
 #include "flang/Optimizer/Support/FatalError.h"
 #include "flang/Optimizer/Support/Utils.h"
 #include "flang/Runtime/entry-names.h"
-#include "flang/Runtime/iostat.h"
+#include "flang/Runtime/iostat-consts.h"
 #include "mlir/Dialect/Complex/IR/Complex.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/Math/IR/Math.h"
@@ -95,10 +95,6 @@ static bool isStaticallyPresent(const fir::ExtendedValue &exv) {
   return !isStaticallyAbsent(exv);
 }
 
-/// IEEE module procedure names not yet implemented for genModuleProcTODO.
-static constexpr char ieee_get_underflow_mode[] = "ieee_get_underflow_mode";
-static constexpr char ieee_set_underflow_mode[] = "ieee_set_underflow_mode";
-
 using I = IntrinsicLibrary;
 
 /// Flag to indicate that an intrinsic argument has to be handled as
@@ -150,7 +146,6 @@ static constexpr IntrinsicHandler handlers[]{
     {"atan2pi", &I::genAtanpi},
     {"atand", &I::genAtand},
     {"atanpi", &I::genAtanpi},
-    {"backtrace", &I::genBacktrace},
     {"bessel_jn",
      &I::genBesselJn,
      {{{"n1", asValue}, {"n2", asValue}, {"x", asValue}}},
@@ -329,7 +324,10 @@ static constexpr IntrinsicHandler handlers[]{
        {"radix", asValue, handleDynamicOptional}}},
      /*isElemental=*/false},
     {"ieee_get_status", &I::genIeeeGetOrSetStatus</*isGet=*/true>},
-    {"ieee_get_underflow_mode", &I::genModuleProcTODO<ieee_get_underflow_mode>},
+    {"ieee_get_underflow_mode",
+     &I::genIeeeGetUnderflowMode,
+     {{{"gradual", asAddr}}},
+     /*isElemental=*/false},
     {"ieee_int", &I::genIeeeInt},
     {"ieee_is_finite", &I::genIeeeIsFinite},
     {"ieee_is_nan", &I::genIeeeIsNan},
@@ -376,7 +374,7 @@ static constexpr IntrinsicHandler handlers[]{
        {"radix", asValue, handleDynamicOptional}}},
      /*isElemental=*/false},
     {"ieee_set_status", &I::genIeeeGetOrSetStatus</*isGet=*/false>},
-    {"ieee_set_underflow_mode", &I::genModuleProcTODO<ieee_set_underflow_mode>},
+    {"ieee_set_underflow_mode", &I::genIeeeSetUnderflowMode},
     {"ieee_signaling_eq",
      &I::genIeeeSignalingCompare<mlir::arith::CmpFPredicate::OEQ>},
     {"ieee_signaling_ge",
@@ -2296,12 +2294,6 @@ mlir::Value IntrinsicLibrary::genConversion(mlir::Type resultType,
   return builder.convertWithSemantics(loc, resultType, args[0]);
 }
 
-template <const char *intrinsicName>
-void IntrinsicLibrary::genModuleProcTODO(
-    llvm::ArrayRef<fir::ExtendedValue> args) {
-  crashOnMissingIntrinsic(loc, intrinsicName);
-}
-
 // ABORT
 void IntrinsicLibrary::genAbort(llvm::ArrayRef<fir::ExtendedValue> args) {
   assert(args.size() == 0);
@@ -2681,12 +2673,6 @@ IntrinsicLibrary::genBesselJn(mlir::Type resultType,
         .end();
     return readAndAddCleanUp(resultMutableBox, resultType, "BESSEL_JN");
   }
-}
-
-// Backtrace
-void IntrinsicLibrary::genBacktrace(llvm::ArrayRef<fir::ExtendedValue> args) {
-  assert(args.size() == 0);
-  fir::runtime::genBacktrace(builder, loc);
 }
 
 // BESSEL_YN
@@ -4478,6 +4464,14 @@ void IntrinsicLibrary::genIeeeGetOrSetStatus(
   genRuntimeCall(isGet ? "fegetenv" : "fesetenv", i32Ty, addr);
 }
 
+// IEEE_GET_UNDERFLOW_MODE
+void IntrinsicLibrary::genIeeeGetUnderflowMode(
+    llvm::ArrayRef<fir::ExtendedValue> args) {
+  assert(args.size() == 1);
+  mlir::Value flag = fir::runtime::genGetUnderflowMode(builder, loc);
+  builder.createStoreWithConvert(loc, flag, fir::getBase(args[0]));
+}
+
 // IEEE_INT
 mlir::Value IntrinsicLibrary::genIeeeInt(mlir::Type resultType,
                                          llvm::ArrayRef<mlir::Value> args) {
@@ -5140,6 +5134,15 @@ void IntrinsicLibrary::genIeeeSetRoundingMode(
   mode = builder.create<fir::ConvertOp>(
       loc, setRound.getFunctionType().getInput(0), mode);
   builder.create<fir::CallOp>(loc, setRound, mode);
+}
+
+// IEEE_SET_UNDERFLOW_MODE
+void IntrinsicLibrary::genIeeeSetUnderflowMode(
+    llvm::ArrayRef<fir::ExtendedValue> args) {
+  assert(args.size() == 1);
+  mlir::Value gradual = builder.create<fir::ConvertOp>(loc, builder.getI1Type(),
+                                                       getBase(args[0]));
+  fir::runtime::genSetUnderflowMode(builder, loc, {gradual});
 }
 
 // IEEE_SIGNALING_EQ, IEEE_SIGNALING_GE, IEEE_SIGNALING_GT,

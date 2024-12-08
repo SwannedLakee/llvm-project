@@ -463,8 +463,7 @@ void Symbol::resolve(Ctx &ctx, const Undefined &other) {
     // A forms group 0. B form group 1. C and D (including their member object
     // files) form group 2. E forms group 3. I think that you can see how this
     // group assignment rule simulates the traditional linker's semantics.
-    bool backref = ctx.arg.warnBackrefs && other.file &&
-                   file->groupId < other.file->groupId;
+    bool backref = ctx.arg.warnBackrefs && file->groupId < other.file->groupId;
     extract(ctx);
 
     if (!ctx.arg.whyExtract.empty())
@@ -477,7 +476,7 @@ void Symbol::resolve(Ctx &ctx, const Undefined &other) {
     // sandwich), where def2 may or may not be the same as def1. We don't want
     // to warn for this case, so dismiss the warning if we see a subsequent lazy
     // definition. this->file needs to be saved because in the case of LTO it
-    // may be reset to nullptr or be replaced with a file named lto.tmp.
+    // may be reset to internalFile or be replaced with a file named lto.tmp.
     if (backref && !isWeak())
       ctx.backwardReferences.try_emplace(this,
                                          std::make_pair(other.file, file));
@@ -485,7 +484,7 @@ void Symbol::resolve(Ctx &ctx, const Undefined &other) {
   }
 
   // Undefined symbols in a SharedFile do not change the binding.
-  if (isa_and_nonnull<SharedFile>(other.file))
+  if (isa<SharedFile>(other.file))
     return;
 
   if (isUndefined() || isShared()) {
@@ -543,19 +542,18 @@ void elf::reportDuplicate(Ctx &ctx, const Symbol &sym, const InputFile *newFile,
   //   >>> defined at baz.c:563
   //   >>>            baz.o in archive libbaz.a
   auto *sec1 = cast<InputSectionBase>(d->section);
-  std::string src1 = sec1->getSrcMsg(sym, d->value);
-  std::string obj1 = sec1->getObjMsg(d->value);
-  std::string src2 = errSec->getSrcMsg(sym, errOffset);
-  std::string obj2 = errSec->getObjMsg(errOffset);
-
   auto diag = Err(ctx);
   diag << "duplicate symbol: " << &sym << "\n>>> defined at ";
-  if (!src1.empty())
-    diag << src1 << "\n>>>            ";
-  diag << obj1 << "\n>>> defined at ";
-  if (!src2.empty())
-    diag << src2 << "\n>>>            ";
-  diag << obj2;
+  auto tell = diag.tell();
+  diag << sec1->getSrcMsg(sym, d->value);
+  if (tell != diag.tell())
+    diag << "\n>>>            ";
+  diag << sec1->getObjMsg(d->value) << "\n>>> defined at ";
+  tell = diag.tell();
+  diag << errSec->getSrcMsg(sym, errOffset);
+  if (tell != diag.tell())
+    diag << "\n>>>            ";
+  diag << errSec->getObjMsg(errOffset);
 }
 
 void Symbol::checkDuplicate(Ctx &ctx, const Defined &other) const {
@@ -620,20 +618,18 @@ void Symbol::resolve(Ctx &ctx, const LazySymbol &other) {
     return;
   }
 
-  // For common objects, we want to look for global or weak definitions that
-  // should be extracted as the canonical definition instead.
-  if (LLVM_UNLIKELY(isCommon()) && ctx.arg.fortranCommon &&
-      other.file->shouldExtractForCommon(getName())) {
-    ctx.backwardReferences.erase(this);
-    other.overwrite(*this);
-    other.extract(ctx);
-    return;
-  }
-
-  if (!isUndefined()) {
-    // See the comment in resolveUndefined().
-    if (isDefined())
+  if (LLVM_UNLIKELY(!isUndefined())) {
+    // See the comment in resolve(Ctx &, const Undefined &).
+    if (isDefined()) {
       ctx.backwardReferences.erase(this);
+    } else if (isCommon() && ctx.arg.fortranCommon &&
+               other.file->shouldExtractForCommon(getName())) {
+      // For common objects, we want to look for global or weak definitions that
+      // should be extracted as the canonical definition instead.
+      ctx.backwardReferences.erase(this);
+      other.overwrite(*this);
+      other.extract(ctx);
+    }
     return;
   }
 
