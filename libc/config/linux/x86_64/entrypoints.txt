@@ -252,7 +252,6 @@ set(TARGET_LIBC_ENTRYPOINTS
     libc.src.sys.mman.munmap
     libc.src.sys.mman.remap_file_pages
     libc.src.sys.mman.posix_madvise
-    libc.src.sys.mman.process_mrelease
     libc.src.sys.mman.shm_open
     libc.src.sys.mman.shm_unlink
 
@@ -366,6 +365,9 @@ set(TARGET_LIBM_ENTRYPOINTS
     libc.src.complex.cimag
     libc.src.complex.cimagf
     libc.src.complex.cimagl
+    libc.src.complex.conj
+    libc.src.complex.conjf
+    libc.src.complex.conjl
     
     # fenv.h entrypoints
     libc.src.fenv.feclearexcept
@@ -622,6 +624,7 @@ if(LIBC_TYPES_HAS_FLOAT16)
     # complex.h C23 _Complex _Float16 entrypoints
     libc.src.complex.crealf16
     libc.src.complex.cimagf16
+    libc.src.complex.conjf16
 
     # math.h C23 _Float16 entrypoints
     libc.src.math.canonicalizef16
@@ -700,6 +703,7 @@ if(LIBC_TYPES_HAS_FLOAT16)
     libc.src.math.scalbnf16
     libc.src.math.setpayloadf16
     libc.src.math.setpayloadsigf16
+    libc.src.math.sinf16
     libc.src.math.sinhf16
     libc.src.math.sinpif16
     libc.src.math.sqrtf16
@@ -730,6 +734,7 @@ if(LIBC_TYPES_HAS_FLOAT128)
     # complex.h C23 _Complex _Float128 entrypoints
     # libc.src.complex.crealf128
     # libc.src.complex.cimagf128
+    # libc.src.complex.conjf128
     
     # math.h C23 _Float128 entrypoints
     libc.src.math.canonicalizef128
@@ -1083,6 +1088,7 @@ if(LLVM_LIBC_FULL_BUILD)
     libc.src.time.mktime
     libc.src.time.nanosleep
     libc.src.time.time
+    libc.src.time.timespec_get
 
     # locale.h entrypoints
     libc.src.locale.localeconv
